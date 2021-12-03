@@ -15,9 +15,15 @@
 
 # Inicialização de Arrays
 declare -A optsOrd=() # Associative Array for options handling. Contains information about the arguments passed.
-declare -a name
-declare -A rx=()
-declare -A tx=()
+declare -A name
+declare -A rx
+declare -A rxb=()
+declare -A rxb1=()
+declare -A rxb2=()
+declare -A tx
+declare -A txb=()
+declare -A txb1=()
+declare -A txb2=()
 declare -A trate=()
 declare -A rrate=()
 
@@ -31,6 +37,7 @@ d=0
 l=0
 n=0
 p=-1
+ctr=1
 t=${@: -1}
 #--------------------------------------------------------------------------------------------------------------------------------
 
@@ -42,7 +49,7 @@ function usage() {
     echo "    -m         : Visualização das quantidades em megabytes."
     echo "    -p [n]     : Número, [n], de interfaces de redes a visualizar."
     echo "    -t         : Ordenação da tabela por TX (decrescente)."
-    echo "    -r         : Ordenação da tabela por RX (decrescente)."
+    echo "    -r         : Ordenação da tabela por RX (decrescente).".
     echo "    -T         : Ordenação da tabela por TRATE (decrescente)."
     echo "    -R         : Ordenação da tabela por RRATE (decrescente)."
     echo "    -v         : Ordenação reversa (crescente)."
@@ -51,7 +58,6 @@ function usage() {
     echo "           O último argumento passado tem de o período de tempo desejado (segundos)."
 }
 function getTable() {
-    printf "%-15s %15s %15s %15s %15s\n" "NETIF" "TX" "RX" "TRATE" "RRATE"
     for net in /sys/class/net/[[:alnum:]]*; do #check all the netifs available
         if [[ -r $net/statistics ]]; then 
             f="$(basename -- $net)" #get netif and make a variable with its name
@@ -60,17 +66,18 @@ function getTable() {
             fi
             rxb1[$f]=$(cat $net/statistics/rx_bytes | grep -o -E '[0-9]+') #get rx in bytes
             txb1[$f]=$(cat $net/statistics/tx_bytes | grep -o -E '[0-9]+') #get tx in bytes
-            name[$n]=$f #save netif name
             let "n+=1" #increment
         fi
     done
     sleep $t
     n=0
+    printf "%-15s %15s %15s %15s %15s\n" "NETIF" "TX" "RX" "TRATE" "RRATE"
     for net in /sys/class/net/[[:alnum:]]*; do #check all the netifs available
         if [[ -r $net/statistics ]]; then
-            f=${name[$n]}
-            
-            
+            f="$(basename -- $net)"
+            if [[ -v optsOrd[c] && ! $f =~ ${optsOrd[c]} ]]; then
+                continue
+            fi
             rxb2[$f]=$(cat $net/statistics/rx_bytes | grep -o -E '[0-9]+') #get rx in bytes
             txb2[$f]=$(cat $net/statistics/tx_bytes | grep -o -E '[0-9]+') #get tx in bytes
             rxb=$((rxb2[$f] - rxb1[$f]))
@@ -78,12 +85,11 @@ function getTable() {
             rrateb=$(bc <<< "scale=1;$rxb/$t") #get rrate in bytes
             trateb=$(bc <<< "scale=1;$txb/$t") #get trate in bytes
             mult=$((1024 ** d))
-            
             rx[$f]=$(bc <<< "scale=1;$rxb/$mult") #save rx value of that variable
             tx[$f]=$(bc <<< "scale=1;$txb/$mult") #save tx value of that variable
-            rrate[$f]=$(bc <<< "scale=1;$rrateb/$mult") #save rrate value of that variable
+            rrate[$f]=$(bc <<< "scale=1;$rrateb/$mult") #save rrate value of that variable  
             trate[$f]=$(bc <<< "scale=1;$trateb/$mult") #save trate value of that variable
-            if [[ $n -lt $p ]]; then
+            if [[ $n -lt $p || $p = -1 ]]; then
                 printf "%-15s %15s %15s %15s %15s\n" "$f" "${tx[$f]}" "${rx[$f]}" "${trate[$f]}" "${rrate[$f]}"
             fi
             let "n+=1"
@@ -114,11 +120,12 @@ while getopts "c:bkmp:trTRvl:" option; do
 
     case $option in
     c) #Seleção das interfaces a visualizar através de uma expressão regular.
-        str=${optsOrd[c]}
-        if [[ $str == 'blank' || ${str:0:1} == "-" || $str =~ $netifre ]]; then
+        c=${optsOrd[c]}
+        if [[ $c == 'blank' || ${c:0:1} == "-" || $c =~ $netifre ]]; then
             echo "Error : A opção -c requer que se indique a interface de rede desejada. Ex -> netifstat -c NETIF1 10" >&2
             exit 1
         fi
+        let "ctr+=2"
         ;;
     p) #Seleção do número de interfaces de redes a visualizar.
         p=${optsOrd[p]}
@@ -126,6 +133,7 @@ while getopts "c:bkmp:trTRvl:" option; do
             echo "Error : A opção -p requer que se indique o número de redes a visualizar. Ex -> netifstat -p 2 10" >&2
             exit 1
         fi
+        let "ctr+=2"
         ;;
     l) #Seleção do intrevalo de tempo entre execuções do loop.
         l=${optsOrd[l]}
@@ -133,8 +141,10 @@ while getopts "c:bkmp:trTRvl:" option; do
             echo "Error : A opção -l requer que se indique o número segundos entre as execuções. Ex -> netifstat -l 2 10" >&2
             exit 1
         fi
+        let "ctr+=2"
         ;;
     r) #Ordenação reversa (crescente).
+        let "ctr+=1"
         ;;
     b | k | m ) #Verificar se
         if [[ $i = 1 ]]; then
@@ -149,6 +159,7 @@ while getopts "c:bkmp:trTRvl:" option; do
         if [[ ${optsOrd[m]} == "blank" ]]; then
             d=2;
         fi
+        let "ctr+=1"
         ;;
     t | r | T | R) 
         if [[ $k = 1 ]]; then
@@ -157,20 +168,26 @@ while getopts "c:bkmp:trTRvl:" option; do
             exit 1
         fi
         k=1
+        let "ctr+=1"
         ;;
     v)
+        let "ctr+=1"
         ;;
     *) # Uso de argumentos inválidos
         echo "Uso de argumentos inválidos."
-        usage
         exit 1
         ;;
     esac
 done
+if ! [[ $# == $ctr ]]; then
+    echo "Uso de argumentos inválidos."
+    exit 1
+fi
 if [[ $l -gt 0 ]]; then
     while true; do
         getTable
         sleep $l
+        echo
     done
 else
     getTable
