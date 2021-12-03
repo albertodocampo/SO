@@ -15,34 +15,35 @@
 
 # Inicialização de Arrays
 declare -A optsOrd=() # Associative Array for options handling. Contains information about the arguments passed.
-declare -A name
-declare -A rx
+declare -A rx=()
 declare -A rxb=()
 declare -A rxb1=()
 declare -A rxb2=()
-declare -A tx
+declare -A tx=()
 declare -A txb=()
 declare -A txb1=()
 declare -A txb2=()
 declare -A trate=()
 declare -A rrate=()
-
+declare -A printingOrd=()
 
 # Inicilização de variáveis
 nre="^[0-9]+|\.[0-9]?$" # nre : expressão regular para números.   
 netifre='^[a-z]\w{1-14}$' # netifre : expressão regular para interfaces de rede.
 i=0 #Usada para verificar a condição de -b, -k, -m
-k=0 #Usada para verificar a condição de -t, -r, -T, -R
+m=0 #Usada para verificar a condição de -t, -r, -T, -R
 d=0
 l=0
 n=0
 p=-1
 ctr=1
+k=1
+reverse=""
 t=${@: -1}
 #--------------------------------------------------------------------------------------------------------------------------------
 
 function usage() {
-    echo "Menu de Uso e Execução do Programa.     Ex -> netifstat.sh -c NETIF1 10"
+    echo "Menu de Uso e Execução do Programa."
     echo "    -c [NETIF] : Seleção das interfaces de rede, [NETIF], a visualizar através de uma expressão regular."
     echo "    -b         : Visualização das quantidades em bytes."
     echo "    -k         : Visualização das quantidades em kilobytes."
@@ -94,19 +95,21 @@ function getTable() {
             fi
             let "n+=1"
         fi
-    done
+    done | sort -k$k$reverse
 }   
 #Option handling 
 while getopts "c:bkmp:trTRvl:" option; do
 
     # Verificação do último argumento
     if [[ $# == 0 ]]; then
-        echo "Necessário, pelo menos, o período de tempo desejado (segundos)."
+        echo "Necessário, pelo menos, o período de tempo desejado (segundos). Ex : ./netifstat.sh 10"
+        usage
         exit 1
     fi
     # Verificação do último argumento
     if [[ $t == $nre ]]; then
-        echo "O último argumento deve ser um número."
+        usage
+        echo "O último argumento deve ser um número. Ex : ./netifstat.sh 10"
         exit 1
     fi
 
@@ -116,13 +119,13 @@ while getopts "c:bkmp:trTRvl:" option; do
     else
         optsOrd[$option]=${OPTARG}  # Caso precisem de argumento, guarda o argumento no array.
     fi
-    echo "$option -> ${optsOrd[$option]}"
 
     case $option in
     c) #Seleção das interfaces a visualizar através de uma expressão regular.
         c=${optsOrd[c]}
         if [[ $c == 'blank' || ${c:0:1} == "-" || $c =~ $netifre ]]; then
             echo "Error : A opção -c requer que se indique a interface de rede desejada. Ex -> netifstat -c NETIF1 10" >&2
+            usage
             exit 1
         fi
         let "ctr+=2"
@@ -131,6 +134,7 @@ while getopts "c:bkmp:trTRvl:" option; do
         p=${optsOrd[p]}
         if [[ $p == 'blank' || ${p:0:1} == "-" || $p == ^$nre ]]; then
             echo "Error : A opção -p requer que se indique o número de redes a visualizar. Ex -> netifstat -p 2 10" >&2
+            usage
             exit 1
         fi
         let "ctr+=2"
@@ -139,11 +143,13 @@ while getopts "c:bkmp:trTRvl:" option; do
         l=${optsOrd[l]}
         if [[ $l == 'blank' || ${l:0:1} == "-" || $l == ^$nre ]]; then
             echo "Error : A opção -l requer que se indique o número segundos entre as execuções. Ex -> netifstat -l 2 10" >&2
+            usage
             exit 1
         fi
         let "ctr+=2"
         ;;
-    r) #Ordenação reversa (crescente).
+    v) #Ordenação reversa (crescente).
+        reverse="r"
         let "ctr+=1"
         ;;
     b | k | m ) #Verificar se
@@ -162,12 +168,24 @@ while getopts "c:bkmp:trTRvl:" option; do
         let "ctr+=1"
         ;;
     t | r | T | R) 
-        if [[ $k = 1 ]]; then
+        reverse="r"
+        if [[ $m = 1 ]]; then
             echo "Só é premitido o uso de uma das opções : -t, -r, -T ou -R."
             usage
             exit 1
         fi
-        k=1
+        if [[ $option == "t" ]]; then
+            k=2
+        fi
+        if [[ $option == "r" ]]; then
+            k=3
+        fi
+        if [[ $option == "T" ]]; then
+            k=4
+        fi
+        if [[ $option == "R" ]]; then
+            k=5
+        fi
         let "ctr+=1"
         ;;
     v)
@@ -175,6 +193,7 @@ while getopts "c:bkmp:trTRvl:" option; do
         ;;
     *) # Uso de argumentos inválidos
         echo "Uso de argumentos inválidos."
+        usage
         exit 1
         ;;
     esac
