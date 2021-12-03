@@ -28,12 +28,11 @@ netifre='^[a-z]\w{1-14}$' # netifre : expressão regular para interfaces de rede
 i=0 #Usada para verificar a condição de -b, -k, -m
 k=0 #Usada para verificar a condição de -t, -r, -T, -R
 d=0
+l=0
+n=0
+p=-1
+t=${@: -1}
 #--------------------------------------------------------------------------------------------------------------------------------
-
-
-# printf "%-15s %15s %15s %15s %15s\n" "NETIF" "TX" "RX" "TRATE" "RRATE"
-#
-
 
 function usage() {
     echo "Menu de Uso e Execução do Programa.     Ex -> netifstat.sh -c NETIF1 10"
@@ -56,21 +55,41 @@ function getTable() {
     for net in /sys/class/net/[[:alnum:]]*; do #check all the netifs available
         if [[ -r $net/statistics ]]; then 
             f="$(basename -- $net)" #get netif and make a variable with its name
-            rxb=$(cat $net/statistics/rx_bytes | grep -o -E '[0-9]+') #get rx in bytes
-            txb=$(cat $net/statistics/tx_bytes | grep -o -E '[0-9]+') #get tx in bytes
-            rrateb=$(bc <<< "scale=1;$rxb/$t") #get rrate in bytes
-            trateb=$(bc <<< "scale=1;$txb/$t") #get trate in bytes
+            if [[ -v optsOrd[c] && ! $f =~ ${optsOrd[c]} ]]; then
+                continue
+            fi
+            rxb1[$f]=$(cat $net/statistics/rx_bytes | grep -o -E '[0-9]+') #get rx in bytes
+            txb1[$f]=$(cat $net/statistics/tx_bytes | grep -o -E '[0-9]+') #get tx in bytes
             name[$n]=$f #save netif name
-            rx[$f]=$rxb/(( 1024 ** $d )) #save rx value of that variable
-            tx[$f]=$txb/(( 1024 ** $d )) #save tx value of that variable
-            rrate[$f]=$rrateb/(( 1024 ** $d )) #save rrate value of that variable
-            trate[$f]=$trateb/(( 1024 ** $d )) #save trate value of that variable
-            printf "%-15s %15s %15s %15s %15s\n" "$f" "${tx[$f]}" "${rx[$f]}" "${trate[$f]}" "${rrate[$f]}"
             let "n+=1" #increment
         fi
     done
+    sleep $t
+    n=0
+    for net in /sys/class/net/[[:alnum:]]*; do #check all the netifs available
+        if [[ -r $net/statistics ]]; then
+            f=${name[$n]}
+            
+            
+            rxb2[$f]=$(cat $net/statistics/rx_bytes | grep -o -E '[0-9]+') #get rx in bytes
+            txb2[$f]=$(cat $net/statistics/tx_bytes | grep -o -E '[0-9]+') #get tx in bytes
+            rxb=$((rxb2[$f] - rxb1[$f]))
+            txb=$((txb2[$f] - txb1[$f]))
+            rrateb=$(bc <<< "scale=1;$rxb/$t") #get rrate in bytes
+            trateb=$(bc <<< "scale=1;$txb/$t") #get trate in bytes
+            mult=$((1024 ** d))
+            
+            rx[$f]=$(bc <<< "scale=1;$rxb/$mult") #save rx value of that variable
+            tx[$f]=$(bc <<< "scale=1;$txb/$mult") #save tx value of that variable
+            rrate[$f]=$(bc <<< "scale=1;$rrateb/$mult") #save rrate value of that variable
+            trate[$f]=$(bc <<< "scale=1;$trateb/$mult") #save trate value of that variable
+            if [[ $n -lt $p ]]; then
+                printf "%-15s %15s %15s %15s %15s\n" "$f" "${tx[$f]}" "${rx[$f]}" "${trate[$f]}" "${rrate[$f]}"
+            fi
+            let "n+=1"
+        fi
+    done
 }   
-
 #Option handling 
 while getopts "c:bkmp:trTRvl:" option; do
 
@@ -79,13 +98,10 @@ while getopts "c:bkmp:trTRvl:" option; do
         echo "Necessário, pelo menos, o período de tempo desejado (segundos)."
         exit 1
     fi
-
     # Verificação do último argumento
-    if [[ ${@: -1} == $nre ]]; then
+    if [[ $t == $nre ]]; then
         echo "O último argumento deve ser um número."
         exit 1
-    else
-        t=${@: -1} # Definir o último parametro, $t
     fi
 
     #Adicionar ao array optsOrd as opcoes passadas ao correr o programa.
@@ -105,15 +121,15 @@ while getopts "c:bkmp:trTRvl:" option; do
         fi
         ;;
     p) #Seleção do número de interfaces de redes a visualizar.
-        str=${optsOrd['p']}
-        if [[ $str == 'blank' || ${str:0:1} == "-" || $str == ^$nre ]]; then
+        p=${optsOrd[p]}
+        if [[ $p == 'blank' || ${p:0:1} == "-" || $p == ^$nre ]]; then
             echo "Error : A opção -p requer que se indique o número de redes a visualizar. Ex -> netifstat -p 2 10" >&2
             exit 1
         fi
         ;;
     l) #Seleção do intrevalo de tempo entre execuções do loop.
-        str=${optsOrd[l]}
-        if [[ $str == 'blank' || ${str:0:1} == "-" || $str == ^$nre ]]; then
+        l=${optsOrd[l]}
+        if [[ $l == 'blank' || ${l:0:1} == "-" || $l == ^$nre ]]; then
             echo "Error : A opção -l requer que se indique o número segundos entre as execuções. Ex -> netifstat -l 2 10" >&2
             exit 1
         fi
@@ -151,4 +167,11 @@ while getopts "c:bkmp:trTRvl:" option; do
         ;;
     esac
 done
-getTable
+if [[ $l -gt 0 ]]; then
+    while true; do
+        getTable
+        sleep $l
+    done
+else
+    getTable
+fi
