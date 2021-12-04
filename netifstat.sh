@@ -14,20 +14,19 @@
 #--------------------------------------------------------------------------------------------------------------------------------
 
 # Inicialização de Arrays
-declare -A optsOrd # Associative Array for options handling. Contains information about the arguments passed.
-declare -A rx
-declare -A rxb
-declare -A rxb1
-declare -A rxb2
-declare -A tx
-declare -A txb
-declare -A txb1
-declare -A txb2
-declare -A trate
-declare -A rrate
-declare -A txtox
-declare -A rxtox
-declare -A printingOrd
+declare -A optsOrd # Array Associativo para tratamento das opções selecionadas. Contem informações sobre os argumentos passados.
+declare -A rx # Array Associativo para guardar os valores de RX de cada interface de rede, na unidade de visualização desejada.
+declare -A rxb # Array Associativo para guardar os valores de RX de cada interface de rede, em bytes.
+declare -A rxb1 # Array Associativo para guardar os valores de RX1 de cada interface de rede, em bytes.
+declare -A rxb2 # Array Associativo para guardar os valores de RX2 de cada interface de rede, em bytes.
+declare -A tx # Array Associativo para guardar os valores de TX de cada interface de rede, na unidade de visualização desejada.
+declare -A txb # Array Associativo para guardar os valores de TX de cada interface de rede, em bytes.
+declare -A txb1 # Array Associativo para guardar os valores de TX1 de cada interface de rede, em bytes.
+declare -A txb2 # Array Associativo para guardar os valores de TX2 de cada interface de rede, em bytes.
+declare -A trate # Array Associativo para guardar os valores de TRATE de cada interface de rede, na unidade de visualização desejada.
+declare -A rrate # Array Associativo para guardar os valores de RRATE de cada interface de rede, na unidade de visualização desejada.
+declare -A txtox # Array Associativo para guardar os valores de TXTOX de cada interface de rede, na unidade de visualização desejada.
+declare -A rxtox # Array Associativo para guardar os valores de RXTOX de cada interface de rede, na unidade de visualização desejada.
 
 # Inicilização de variáveis
 nre="^[0-9]+|\.[0-9]?$" # Expressão regular usada para números.   
@@ -38,9 +37,9 @@ d=0 # Usada para verificar a condição de -t, -r, -T, -R.
 l=0 # Usada para trasnsportar valor do loop de -l.
 p=-1 # Usada para trasnsportar o número de interfaces a visualizar de -c.
 ctr=1 # Usada para calcular o valor de controlo dos argumentos.
-k=1
-reverse=""
-t=${@: -1}
+k=1 # Usada para determinar a coluna da tabela relevante à ordenação.
+reverse="" # Usada para alternar a ordernação entre decrescente e crescente.
+t=${@: -1} # Usada para guardar o último argumento e usá-lo em todo o programa.
 #--------------------------------------------------------------------------------------------------------------------------------
 
 function usage() { # Menu de execução do programa.
@@ -55,38 +54,38 @@ function usage() { # Menu de execução do programa.
     echo "    -T         : Ordenação da tabela por TRATE (decrescente)."
     echo "    -R         : Ordenação da tabela por RRATE (decrescente)."
     echo "    -v         : Ordenação reversa (crescente)."
-    echo "    -l [s]     : Loop de execução do programa a cada [s] segundos."
+    echo "    -l         : Loop de execução do programa a cada [s] segundos."
     echo "ALERTAS -> As opções -t,-r,-T,-R não podem ser utilizadas em simultâneo."
     echo "           O último argumento passado tem de o período de tempo desejado (segundos)."
 }
 function getTable() { # Função principal do programa. Obtém os valores desejados, ordena-los e imprimi-los.
-    n=0
-    for net in /sys/class/net/[[:alnum:]]*; do #check all the netifs available
+    n=0 # Usada para controlar o número de interfaces de rede encontradas.
+    for net in /sys/class/net/[[:alnum:]]*; do # Procurar por todas as interfaces de rede disponiveis.
         if [[ -r $net/statistics ]]; then 
             f="$(basename -- $net)" # Passar $f com o nome da interface de rede.
             # Condição para apenas trabalhar com interfaces de rede que coincidam com a expressão regular passada pela opção -c.
             if [[ -v optsOrd[c] && ! $f =~ ${optsOrd[c]} ]]; then
                 continue
             fi
-            if [[ -z ${rxb1[$f]} ]]; then
-                rxb1[$f]=$(cat $net/statistics/rx_bytes | grep -o -E '[0-9]+') # Obter do valor de RX1 em bytes.
+            if [[ -z ${rxb1[$f]} ]]; then # Caso em que o valor de RX1 ainda não está definido.
+                rxb1[$f]=$(cat $net/statistics/rx_bytes | grep -o -E '[0-9]+') # Obter do valor de RX1 em bytes, na primeira execução.
             else
-                rxb1[$f]=${rxb2[$f]}
+                rxb1[$f]=${rxb2[$f]} # Obter do valor de RX1 em bytes, a partir do RX2 da execução anterior.
             fi
-            if [[ -z ${txb1[$f]} ]]; then
-                txb1[$f]=$(cat $net/statistics/tx_bytes | grep -o -E '[0-9]+') # Obter do valor de TX1 em bytes.
+            if [[ -z ${txb1[$f]} ]]; then # Caso em que o valor de TX1 ainda não está definido.
+                txb1[$f]=$(cat $net/statistics/tx_bytes | grep -o -E '[0-9]+') # Obter do valor de TX1 em bytes, na primeira execução.
             else
-                txb1[$f]=${txb2[$f]}
+                txb1[$f]=${txb2[$f]} # Obter do valor de TX1 em bytes, a partir do TX2 da execução anterior.
             fi
         fi
     done
     sleep $t # Tempo de espera entre pedidos da quantidade de dados transmitidos e recebidos. Passado como último argumento.
-    if [[ $l == 0 ]]; then
+    if [[ $l == 0 ]]; then # Caso em que não se passou a opção -l e não é preciso calcular o RX e TX total.
         printf "%-15s %15s %15s %15s %15s\n" "NETIF" "TX" "RX" "TRATE" "RRATE" # Imprimir o cabeçalho da tabela
     else
         printf "%-15s %15s %15s %15s %15s %15s %15s\n" "NETIF" "TX" "RX" "TRATE" "RRATE" "TXTOX" "RXTOX" # Imprimir o cabeçalho da tabela
     fi
-    for net in /sys/class/net/[[:alnum:]]*; do # Verificar todas as interfaces de rede disponíveis
+    for net in /sys/class/net/[[:alnum:]]*; do # Procurar por todas as interfaces de rede disponiveis.
         if [[ -r $net/statistics ]]; then
             f="$(basename -- $net)" # Passar $f com o nome da interface de rede.
             # Condição para apenas trabalhar com interfaces de rede que coincidam com a expressão regular passada pela opção -c.
@@ -104,44 +103,48 @@ function getTable() { # Função principal do programa. Obtém os valores deseja
             tx[$f]=$(bc <<< "scale=1;$txb/$mult") # Alterar TX para unidade desejada e salva-la no array.
             rrate[$f]=$(bc <<< "scale=1;$rrateb/$mult") # Alterar RRATE para unidade desejada e salva-la no array.
             trate[$f]=$(bc <<< "scale=1;$trateb/$mult") # Alterar TRATE para unidade desejada e salva-la no array.
-            if [[ -z ${txtox[$f]} ]]; then
+            if [[ -z ${txtox[$f]} ]]; then # Inicialização do TXTOX se ele ainda não existir.
                 txtox[$f]=0
             fi
-            if [[ -z ${rxtox[$f]} ]]; then
+            if [[ -z ${rxtox[$f]} ]]; then # Inicialização do RXTOX se ele ainda não existir.
                 rxtox[$f]=0
             fi
-            txtox[$f]=$(bc <<< "scale=1;${txtox[$f]}+${tx[$f]}")
-            rxtox[$f]=$(bc <<< "scale=1;${rxtox[$f]}+${rx[$f]}")
+            txtox[$f]=$(bc <<< "scale=1;${txtox[$f]}+${tx[$f]}") # Soma do valor de TX anterior ao TX total.
+            rxtox[$f]=$(bc <<< "scale=1;${rxtox[$f]}+${rx[$f]}") # Soma do valor de RX anterior ao RX total.
             fi
     done
-    for net in /sys/class/net/[[:alnum:]]*; do
+    for net in /sys/class/net/[[:alnum:]]*; do # Procurar por todas as interfaces de rede disponiveis.
         if [[ -r $net/statistics ]]; then
             f="$(basename -- $net)" # Passar $f com o nome da interface de rede.
             if [[ $n -lt $p || $p = -1 ]]; then # Condição para apenas serem vistos o número de interfaces passados pela opção -p.
-                if [[ $l == 0 ]]; then
+                # Condição para apenas trabalhar com interfaces de rede que coincidam com a expressão regular passada pela opção -c.
+                if [[ -v optsOrd[c] && ! $f =~ ${optsOrd[c]} ]]; then
+                    continue
+                fi
+                if [[ $l == 0 ]]; then # Caso em que não se passou a opção -l e não é preciso calcular o RX e TX total.
                     printf "%-15s %15s %15s %15s %15s\n" "$f" "${tx[$f]}" "${rx[$f]}" "${trate[$f]}" "${rrate[$f]}" # Imprimir os valores da tabela
-                else
+                else 
                     printf "%-15s %15s %15s %15s %15s %15s %15s\n" "$f" "${tx[$f]}" "${rx[$f]}" "${trate[$f]}" "${rrate[$f]}" "${txtox[$f]}" "${rxtox[$f]}" # Imprimir os valores da tabela
                 fi
             fi
-            let "n+=1"
+            let "n+=1" # Incrementar o valor de n.
         fi
-    done | sort -k$k$reverse
+    done | sort -k$k$reverse # Ordernar o output da tabela a partir da coluna ( $k ), decrescente ou crescente ( $reverse ).
 }   
-#Option handling 
+# While para tratamento das opções selecionadas.
 while getopts "c:bkmp:trTRvl" option; do
 
-    # Verificação do último argumento
+    # Verificação da existência do último argumento.
     if [[ $# == 0 ]]; then
         echo "Necessário, pelo menos, o período de tempo desejado (segundos). Ex -> ./netifstat.sh 10"
-        usage
-        exit 1
-    fi
-    # Verificação do último argumento
-    if [[ $t == $nre ]]; then
         usage # Menu de execução do programa.
+        exit 1 # Terminar o programa
+    fi
+    # Verificação do último argumento.
+    if [[ $t == $nre ]]; then
         echo "O último argumento deve ser um número. Ex -> ./netifstat.sh 10"
-        exit 1
+        usage # Menu de execução do programa.
+        exit 1 # Terminar o programa
     fi
 
     #Adicionar ao array optsOrd as opcoes passadas ao correr o programa.
@@ -157,7 +160,7 @@ while getopts "c:bkmp:trTRvl" option; do
         if [[ $c == 'blank' || ${c:0:1} == "-" || $c =~ $netifre ]]; then
             echo "Error : A opção -c requer que se indique a interface de rede desejada. Ex -> netifstat -c NETIF1 10" >&2
             usage # Menu de execução do programa.
-            exit 1
+            exit 1 # Terminar o programa
         fi
         let "ctr+=2" # Acrescentar 2 ao valor de controlo dos argumentos.
         ;;
@@ -166,7 +169,7 @@ while getopts "c:bkmp:trTRvl" option; do
         if [[ $p == 'blank' || ${p:0:1} == "-" || $p == ^$nre ]]; then
             echo "Error : A opção -p requer que se indique o número de redes a visualizar. Ex -> netifstat -p 2 10" >&2
             usage # Menu de execução do programa.
-            exit 1
+            exit 1 # Terminar o programa
         fi
         let "ctr+=2" # Acrescentar 2 ao valor de controlo dos argumentos.
         ;;
@@ -174,27 +177,23 @@ while getopts "c:bkmp:trTRvl" option; do
         l=1
         let "ctr+=1" # Acrescentar 2 ao valor de controlo dos argumentos.
         ;;
-    v) #Ordenação reversa (crescente).
-        reverse="r"
-        let "ctr+=1" # Acrescentar 1 ao valor de controlo dos argumentos.
-        ;;
-    b | k | m ) #Verificar se
+    b | k | m ) # Mudar a unidade de visulização (Bytes, Kilobytes, Megabytes).
         if [[ $i = 1 ]]; then
             echo "Só é permitido o uso de uma das opções : -b, -k ou -m. Ex -> ./netifstat -b 10"
             usage # Menu de execução do programa.
-            exit 1
+            exit 1 # Terminar o programa
         fi
         i=1
-        if [[ ${optsOrd[k]} == "blank" ]]; then
+        if [[ ${optsOrd[k]} == "blank" ]]; then # Mudar a unidade de visulização para kilobytes.
             d=1;
         fi
-        if [[ ${optsOrd[m]} == "blank" ]]; then
+        if [[ ${optsOrd[m]} == "blank" ]]; then # Mudar a unidade de visulização para megabytes.
             d=2;
         fi
         let "ctr+=1" # Acrescentar 1 ao valor de controlo dos argumentos.
         ;;
-    t | r | T | R) 
-        reverse="r"
+    t | r | T | R) # Ordenação da tabela por coluna (decrescente).
+        reverse="r" 
         if [[ $m = 1 ]]; then
             echo "Só é premitido o uso de uma das opções : -t, -r, -T ou -R. Ex -> ./netifstat -r 10"
             usage # Menu de execução do programa.
@@ -214,10 +213,18 @@ while getopts "c:bkmp:trTRvl" option; do
         fi
         let "ctr+=1" # Acrescentar 1 ao valor de controlo dos argumentos.
         ;;
+    v) # Ordenação reversa (crescente).
+        if [[ $reverse == "r" ]]; then # Caso o $reverse já tenha sido mudado em "t | r | T | R)"
+            reverse="" # Fazer a tabela imprimir de forma
+        else
+            reverse="r"
+        fi
+        let "ctr+=1" # Acrescentar 1 ao valor de controlo dos argumentos.
+        ;;
     *) # Uso de argumentos inválidos.
         echo "Uso de argumentos inválidos."
         usage # Menu de execução do programa.
-        exit 1
+        exit 1 # Terminar o programa
         ;;
     esac
 done
@@ -226,7 +233,7 @@ done
 if ! [[ $# == $ctr ]]; then
     echo "Uso de argumentos inválidos."
     usage # Menu de execução do programa.
-    exit 1
+    exit 1 # Terminar o programa
 fi
 # Execução da função getTable dependendo da opção -l (loop)
 if [[ $l -gt 0 ]]; then
