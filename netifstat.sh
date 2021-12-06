@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #--------------------------------------------------------------------------------------------------------------------------------
-#                                       Trabalho 1
-#                       Monitorização de interfaces de rede em bash
+#                                             Trabalho 1
+#                             Monitorização de interfaces de rede em bash
 #
 # Guião
 #    O objectivo do trabalho é o desenvolvimento de um script em bash que apresenta estatísticas
@@ -16,29 +16,27 @@
 # Inicialização de Arrays
 declare -A optsOrd # Array Associativo para tratamento das opções selecionadas. Contem informações sobre os argumentos passados.
 declare -A rx # Array Associativo para guardar os valores de RX de cada interface de rede, na unidade de visualização desejada.
-declare -A rxb # Array Associativo para guardar os valores de RX de cada interface de rede, em bytes.
 declare -A rxb1 # Array Associativo para guardar os valores de RX1 de cada interface de rede, em bytes.
 declare -A rxb2 # Array Associativo para guardar os valores de RX2 de cada interface de rede, em bytes.
 declare -A tx # Array Associativo para guardar os valores de TX de cada interface de rede, na unidade de visualização desejada.
-declare -A txb # Array Associativo para guardar os valores de TX de cada interface de rede, em bytes.
 declare -A txb1 # Array Associativo para guardar os valores de TX1 de cada interface de rede, em bytes.
 declare -A txb2 # Array Associativo para guardar os valores de TX2 de cada interface de rede, em bytes.
 declare -A trate # Array Associativo para guardar os valores de TRATE de cada interface de rede, na unidade de visualização desejada.
 declare -A rrate # Array Associativo para guardar os valores de RRATE de cada interface de rede, na unidade de visualização desejada.
-declare -A txtox # Array Associativo para guardar os valores de TXTOX de cada interface de rede, na unidade de visualização desejada.
-declare -A rxtox # Array Associativo para guardar os valores de RXTOX de cada interface de rede, na unidade de visualização desejada.
+declare -A txtot # Array Associativo para guardar os valores de TXTOT de cada interface de rede, na unidade de visualização desejada.
+declare -A rxtot # Array Associativo para guardar os valores de RXTOT de cada interface de rede, na unidade de visualização desejada.
 
 # Inicilização de variáveis
 nre="^[0-9]+|\.[0-9]?$" # Expressão regular usada para números.   
 netifre='^[a-z]\w{1-14}$' # Expressão regular usada para interfaces de rede.
 i=0 # Usada para verificar a condição de uso de apenas um dos -b, -k ou -m.
+d=0 # Usada para verificar a condição do argumento passado entre -b, -k ou -m.
 m=0 # Usada para verificar a condição de uso de apenas um dos -t, -r, -T ou -R.
-d=0 # Usada para verificar a condição de -t, -r, -T, -R.
-l=0 # Usada para trasnsportar valor do loop de -l.
-p=-1 # Usada para trasnsportar o número de interfaces a visualizar de -c.
+l=0 # Usada para transportar valor do loop de -l.
+p=-1 # Usada para transportar o número de interfaces a visualizar de -c.
 ctr=1 # Usada para calcular o valor de controlo dos argumentos.
 k=1 # Usada para determinar a coluna da tabela relevante à ordenação.
-reverse="" # Usada para alternar a ordernação entre decrescente e crescente.
+reverse="" # Usada para alternar a ordenação entre decrescente e crescente.
 t=${@: -1} # Usada para guardar o último argumento e usá-lo em todo o programa.
 #--------------------------------------------------------------------------------------------------------------------------------
 
@@ -58,8 +56,7 @@ function usage() { # Menu de execução do programa.
     echo "ALERTAS -> As opções -t,-r,-T,-R não podem ser utilizadas em simultâneo."
     echo "           O último argumento passado tem de o período de tempo desejado (segundos)."
 }
-function getTable() { # Função principal do programa. Obtém os valores desejados, ordena-los e imprimi-los.
-    n=0 # Usada para controlar o número de interfaces de rede encontradas.
+function getTable() { # Função principal do programa. Obtém os valores desejados, ordena-os e imprimi-os.
     for net in /sys/class/net/[[:alnum:]]*; do # Procurar por todas as interfaces de rede disponiveis.
         if [[ -r $net/statistics ]]; then 
             f="$(basename -- $net)" # Passar $f com o nome da interface de rede.
@@ -80,11 +77,6 @@ function getTable() { # Função principal do programa. Obtém os valores deseja
         fi
     done
     sleep $t # Tempo de espera entre pedidos da quantidade de dados transmitidos e recebidos. Passado como último argumento.
-    if [[ $l == 0 ]]; then # Caso em que não se passou a opção -l e não é preciso calcular o RX e TX total.
-        printf "%-15s %15s %15s %15s %15s\n" "NETIF" "TX" "RX" "TRATE" "RRATE" # Imprimir o cabeçalho da tabela
-    else
-        printf "%-15s %15s %15s %15s %15s %15s %15s\n" "NETIF" "TX" "RX" "TRATE" "RRATE" "TXTOX" "RXTOX" # Imprimir o cabeçalho da tabela
-    fi
     for net in /sys/class/net/[[:alnum:]]*; do # Procurar por todas as interfaces de rede disponiveis.
         if [[ -r $net/statistics ]]; then
             f="$(basename -- $net)" # Passar $f com o nome da interface de rede.
@@ -103,16 +95,22 @@ function getTable() { # Função principal do programa. Obtém os valores deseja
             tx[$f]=$(bc <<< "scale=1;$txb/$mult") # Alterar TX para unidade desejada e salva-la no array.
             rrate[$f]=$(bc <<< "scale=1;$rrateb/$mult") # Alterar RRATE para unidade desejada e salva-la no array.
             trate[$f]=$(bc <<< "scale=1;$trateb/$mult") # Alterar TRATE para unidade desejada e salva-la no array.
-            if [[ -z ${txtox[$f]} ]]; then # Inicialização do TXTOX se ele ainda não existir.
-                txtox[$f]=0
+            if [[ -z ${txtot[$f]} ]]; then # Inicialização do TXTOT se ele ainda não existir.
+                txtot[$f]=0
             fi
-            if [[ -z ${rxtox[$f]} ]]; then # Inicialização do RXTOX se ele ainda não existir.
-                rxtox[$f]=0
+            if [[ -z ${rxtot[$f]} ]]; then # Inicialização do RXTOT se ele ainda não existir.
+                rxtot[$f]=0
             fi
-            txtox[$f]=$(bc <<< "scale=1;${txtox[$f]}+${tx[$f]}") # Soma do valor de TX anterior ao TX total.
-            rxtox[$f]=$(bc <<< "scale=1;${rxtox[$f]}+${rx[$f]}") # Soma do valor de RX anterior ao RX total.
+            txtot[$f]=$(bc <<< "scale=1;${txtot[$f]}+${tx[$f]}") # Soma do valor de TX anterior ao TX total.
+            rxtot[$f]=$(bc <<< "scale=1;${rxtot[$f]}+${rx[$f]}") # Soma do valor de RX anterior ao RX total.
             fi
     done
+    if [[ $l == 0 ]]; then # Caso em que não se passou a opção -l e não é preciso calcular o RX e TX total.
+        printf "%-15s %15s %15s %15s %15s\n" "NETIF" "TX" "RX" "TRATE" "RRATE" # Imprimir o cabeçalho da tabela.
+    else
+        printf "%-15s %15s %15s %15s %15s %15s %15s\n" "NETIF" "TX" "RX" "TRATE" "RRATE" "TXTOT" "RXTOT" # Imprimir o cabeçalho da tabela.
+    fi
+    n=0 # Usada para controlar o número de interfaces de rede impressas.
     for net in /sys/class/net/[[:alnum:]]*; do # Procurar por todas as interfaces de rede disponiveis.
         if [[ -r $net/statistics ]]; then
             f="$(basename -- $net)" # Passar $f com o nome da interface de rede.
@@ -122,9 +120,9 @@ function getTable() { # Função principal do programa. Obtém os valores deseja
                     continue
                 fi
                 if [[ $l == 0 ]]; then # Caso em que não se passou a opção -l e não é preciso calcular o RX e TX total.
-                    printf "%-15s %15s %15s %15s %15s\n" "$f" "${tx[$f]}" "${rx[$f]}" "${trate[$f]}" "${rrate[$f]}" # Imprimir os valores da tabela
+                    printf "%-15s %15s %15s %15s %15s\n" "$f" "${tx[$f]}" "${rx[$f]}" "${trate[$f]}" "${rrate[$f]}" # Imprimir os valores da tabela.
                 else 
-                    printf "%-15s %15s %15s %15s %15s %15s %15s\n" "$f" "${tx[$f]}" "${rx[$f]}" "${trate[$f]}" "${rrate[$f]}" "${txtox[$f]}" "${rxtox[$f]}" # Imprimir os valores da tabela
+                    printf "%-15s %15s %15s %15s %15s %15s %15s\n" "$f" "${tx[$f]}" "${rx[$f]}" "${trate[$f]}" "${rrate[$f]}" "${txtot[$f]}" "${rxtot[$f]}" # Imprimir os valores da tabela.
                 fi
             fi
             let "n+=1" # Incrementar o valor de n.
@@ -175,7 +173,7 @@ while getopts "c:bkmp:trTRvl" option; do
         ;;
     l) #Seleção do intrevalo de tempo entre execuções do loop.
         l=1
-        let "ctr+=1" # Acrescentar 2 ao valor de controlo dos argumentos.
+        let "ctr+=1" # Acrescentar 1 ao valor de controlo dos argumentos.
         ;;
     b | k | m ) # Mudar a unidade de visulização (Bytes, Kilobytes, Megabytes).
         if [[ $i = 1 ]]; then
@@ -215,7 +213,7 @@ while getopts "c:bkmp:trTRvl" option; do
         ;;
     v) # Ordenação reversa (crescente).
         if [[ $reverse == "r" ]]; then # Caso o $reverse já tenha sido mudado em "t | r | T | R)"
-            reverse="" # Fazer a tabela imprimir de forma
+            reverse="" # Fazer a tabela imprimir de forma crescente
         else
             reverse="r"
         fi
