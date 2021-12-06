@@ -27,15 +27,15 @@ declare -A txtot # Array Associativo para guardar os valores de TXTOT de cada in
 declare -A rxtot # Array Associativo para guardar os valores de RXTOT de cada interface de rede, na unidade de visualização desejada.
 
 # Inicilização de variáveis
-nre="^[0-9]+|\.[0-9]?$" # Expressão regular usada para números.   
-netifre='^[a-z]\w{1-14}$' # Expressão regular usada para interfaces de rede.
+nre="^[0-9]+(\.[0-9]*)?$" # Expressão regular usada para números.   
 i=0 # Usada para verificar a condição de uso de apenas um dos -b, -k ou -m.
 d=0 # Usada para verificar a condição do argumento passado entre -b, -k ou -m.
 m=0 # Usada para verificar a condição de uso de apenas um dos -t, -r, -T ou -R.
 l=0 # Usada para transportar valor do loop de -l.
-p=-1 # Usada para transportar o número de interfaces a visualizar de -c.
+p=-1 # Usada para transportar o número de interfaces a visualizar de -p.
 ctr=1 # Usada para calcular o valor de controlo dos argumentos.
 k=1 # Usada para determinar a coluna da tabela relevante à ordenação.
+c="" # Usada para transportar a expressão regular passada em -c
 reverse="" # Usada para alternar a ordenação entre decrescente e crescente.
 t=${@: -1} # Usada para guardar o último argumento e usá-lo em todo o programa.
 #--------------------------------------------------------------------------------------------------------------------------------
@@ -88,21 +88,21 @@ function getTable() { # Função principal do programa. Obtém os valores deseja
             txb2[$f]=$(cat $net/statistics/tx_bytes | grep -o -E '[0-9]+') # Obter do valor de TX2 em bytes.
             rxb=$((rxb2[$f] - rxb1[$f])) # Obter do valor de RX em bytes, subtraindo RX2 por RX1.
             txb=$((txb2[$f] - txb1[$f])) # Obter do valor de TX em bytes, subtraindo TX2 por TX1.
-            rrateb=$(bc <<< "scale=1;$rxb/$t") # Obter do valor de RRATE em bytes.
-            trateb=$(bc <<< "scale=1;$txb/$t") # Obter do valor de TRATE em bytes.
+            rrateb=$(bc <<< "scale=3;$rxb/$t") # Obter do valor de RRATE em bytes.
+            trateb=$(bc <<< "scale=3;$txb/$t") # Obter do valor de TRATE em bytes.
             mult=$((1024 ** d)) # Calculo usado para alterar a unidade desejada (Bytes, Kilobytes, Megabytes).
-            rx[$f]=$(bc <<< "scale=1;$rxb/$mult") # Alterar RX para unidade desejada e salva-la no array.
-            tx[$f]=$(bc <<< "scale=1;$txb/$mult") # Alterar TX para unidade desejada e salva-la no array.
-            rrate[$f]=$(bc <<< "scale=1;$rrateb/$mult") # Alterar RRATE para unidade desejada e salva-la no array.
-            trate[$f]=$(bc <<< "scale=1;$trateb/$mult") # Alterar TRATE para unidade desejada e salva-la no array.
+            rx[$f]=$(bc <<< "scale=3;$rxb/$mult") # Alterar RX para unidade desejada e salva-la no array.
+            tx[$f]=$(bc <<< "scale=3;$txb/$mult") # Alterar TX para unidade desejada e salva-la no array.
+            rrate[$f]=$(bc <<< "scale=3;$rrateb/$mult") # Alterar RRATE para unidade desejada e salva-la no array.
+            trate[$f]=$(bc <<< "scale=3;$trateb/$mult") # Alterar TRATE para unidade desejada e salva-la no array.
             if [[ -z ${txtot[$f]} ]]; then # Inicialização do TXTOT se ele ainda não existir.
                 txtot[$f]=0
             fi
             if [[ -z ${rxtot[$f]} ]]; then # Inicialização do RXTOT se ele ainda não existir.
                 rxtot[$f]=0
             fi
-            txtot[$f]=$(bc <<< "scale=1;${txtot[$f]}+${tx[$f]}") # Soma do valor de TX anterior ao TX total.
-            rxtot[$f]=$(bc <<< "scale=1;${rxtot[$f]}+${rx[$f]}") # Soma do valor de RX anterior ao RX total.
+            txtot[$f]=$(bc <<< "scale=3;${txtot[$f]}+${tx[$f]}") # Soma do valor de TX anterior ao TX total.
+            rxtot[$f]=$(bc <<< "scale=3;${rxtot[$f]}+${rx[$f]}") # Soma do valor de RX anterior ao RX total.
             fi
     done
     if [[ $l == 0 ]]; then # Caso em que não se passou a opção -l e não é preciso calcular o RX e TX total.
@@ -128,22 +128,23 @@ function getTable() { # Função principal do programa. Obtém os valores deseja
             let "n+=1" # Incrementar o valor de n.
         fi
     done | sort -k$k$reverse # Ordernar o output da tabela a partir da coluna ( $k ), decrescente ou crescente ( $reverse ).
-}   
+} 
+
+# Verificação da existência do último argumento.
+if [[ $# == 0 ]]; then
+    echo "Necessário, pelo menos, o período de tempo desejado (segundos). Ex -> ./netifstat.sh 10"
+    usage # Menu de execução do programa.
+    exit 1 # Terminar o programa
+fi
+# Verificação do último argumento.
+if ! [[ $t =~ $nre ]]; then
+    echo "O último argumento deve ser um número. Ex -> ./netifstat.sh 10"
+    usage # Menu de execução do programa.
+    exit 1 # Terminar o programa
+fi
+
 # While para tratamento das opções selecionadas.
 while getopts "c:bkmp:trTRvl" option; do
-
-    # Verificação da existência do último argumento.
-    if [[ $# == 0 ]]; then
-        echo "Necessário, pelo menos, o período de tempo desejado (segundos). Ex -> ./netifstat.sh 10"
-        usage # Menu de execução do programa.
-        exit 1 # Terminar o programa
-    fi
-    # Verificação do último argumento.
-    if [[ $t == $nre ]]; then
-        echo "O último argumento deve ser um número. Ex -> ./netifstat.sh 10"
-        usage # Menu de execução do programa.
-        exit 1 # Terminar o programa
-    fi
 
     #Adicionar ao array optsOrd as opcoes passadas ao correr o programa.
     if [[ -z "$OPTARG" ]]; then
@@ -155,16 +156,11 @@ while getopts "c:bkmp:trTRvl" option; do
     case $option in
     c) #Seleção das interfaces a visualizar através de uma expressão regular.
         c=${optsOrd[c]}
-        if [[ $c == 'blank' || ${c:0:1} == "-" || $c =~ $netifre ]]; then
-            echo "Error : A opção -c requer que se indique a interface de rede desejada. Ex -> netifstat -c NETIF1 10" >&2
-            usage # Menu de execução do programa.
-            exit 1 # Terminar o programa
-        fi
         let "ctr+=2" # Acrescentar 2 ao valor de controlo dos argumentos.
         ;;
     p) #Seleção do número de interfaces de redes a visualizar.
         p=${optsOrd[p]}
-        if [[ $p == 'blank' || ${p:0:1} == "-" || $p == ^$nre ]]; then
+        if ! [[ $p =~ $nre ]]; then
             echo "Error : A opção -p requer que se indique o número de redes a visualizar. Ex -> netifstat -p 2 10" >&2
             usage # Menu de execução do programa.
             exit 1 # Terminar o programa
@@ -197,6 +193,7 @@ while getopts "c:bkmp:trTRvl" option; do
             usage # Menu de execução do programa.
             exit 1
         fi
+        let "m+=1"
         if [[ $option == "t" ]]; then # Uso da opção -t.
             k=2 # Alterar a coluna 2 da impressão. Coluna dos valores de TX.
         fi
@@ -229,7 +226,7 @@ done
 # Verificar se o valor do controlo de argumentos é igual ao número de argumentos passados.
 # Evitar casos em que o programa corre se forem usados argumentos do tipo -> ./netifstat -c 2
 if ! [[ $# == $ctr ]]; then
-    echo "Uso de argumentos inválidos."
+    echo "Uso de argumentos inválidos. Poucos argumentos foram passados."
     usage # Menu de execução do programa.
     exit 1 # Terminar o programa
 fi
